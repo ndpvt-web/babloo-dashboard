@@ -8,25 +8,70 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
     <script>
-      // Static API shim: intercept fetch calls and serve pre-exported JSON
+      // Smart gateway: try live tunnel first, fall back to static JSON
       (function() {
         var _fetch = window.fetch;
+        var tunnelUrl = null;
+        var tunnelChecked = false;
+        var tunnelAlive = false;
+
+        // Check tunnel on load
+        _fetch('./api/tunnel.json').then(function(r) {
+          if (!r.ok) return;
+          return r.json();
+        }).then(function(data) {
+          if (data && data.url) {
+            tunnelUrl = data.url;
+            // Probe tunnel health
+            return _fetch(tunnelUrl + '/api/health', { mode: 'cors', signal: AbortSignal.timeout(3000) });
+          }
+        }).then(function(r) {
+          if (r && r.ok) {
+            tunnelAlive = true;
+            console.log('[Gateway] Live tunnel active: ' + tunnelUrl);
+          }
+        }).catch(function() {
+          console.log('[Gateway] Tunnel unreachable, using static data');
+        }).finally(function() {
+          tunnelChecked = true;
+        });
+
         window.fetch = function(url, opts) {
           if (typeof url === 'string' && url.indexOf('/api/') !== -1) {
-            var apiPath = url.split('/api/')[1];
-            if (!apiPath) return _fetch(url, opts);
-            apiPath = apiPath.split('?')[0];
-            var staticFile = apiPath.replace(/\//g, '-');
-            if (staticFile.endsWith('-')) staticFile = staticFile.slice(0, -1);
-            var jsonUrl = './api/' + staticFile + '.json';
-            return _fetch(jsonUrl, { method: 'GET' }).then(function(resp) {
-              if (resp.ok) return resp;
-              var base = staticFile.split('-')[0];
-              return _fetch('./api/' + base + '.json', { method: 'GET' });
-            });
+            // If tunnel is alive, proxy to it
+            if (tunnelAlive && tunnelUrl) {
+              var apiPath = url.split('/api/')[1];
+              if (apiPath) {
+                apiPath = apiPath.split('?')[0];
+                var liveUrl = tunnelUrl + '/api/' + apiPath;
+                return _fetch(liveUrl, Object.assign({}, opts || {}, { mode: 'cors' })).then(function(resp) {
+                  if (resp.ok) return resp;
+                  // Fall back to static on error
+                  return fetchStatic(url);
+                }).catch(function() {
+                  return fetchStatic(url);
+                });
+              }
+            }
+            // Static fallback
+            return fetchStatic(url);
           }
           return _fetch(url, opts);
         };
+
+        function fetchStatic(url) {
+          var apiPath = url.split('/api/')[1];
+          if (!apiPath) return _fetch(url);
+          apiPath = apiPath.split('?')[0];
+          var staticFile = apiPath.replace(/\//g, '-');
+          if (staticFile.endsWith('-')) staticFile = staticFile.slice(0, -1);
+          var jsonUrl = './api/' + staticFile + '.json';
+          return _fetch(jsonUrl, { method: 'GET' }).then(function(resp) {
+            if (resp.ok) return resp;
+            var base = staticFile.split('-')[0];
+            return _fetch('./api/' + base + '.json', { method: 'GET' });
+          });
+        }
       })();
     </script>
     <script type="module" crossorigin src="./assets/index-78C6655Z.js"></script>
