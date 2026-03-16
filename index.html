@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Babloo Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+    <script>
+      // Static API shim: intercept fetch calls and serve pre-exported JSON
+      (function() {
+        var _fetch = window.fetch;
+        window.fetch = function(url, opts) {
+          if (typeof url === 'string' && url.indexOf('/api/') !== -1) {
+            var apiPath = url.split('/api/')[1];
+            if (!apiPath) return _fetch(url, opts);
+            apiPath = apiPath.split('?')[0];
+            var staticFile = apiPath.replace(/\//g, '-');
+            if (staticFile.endsWith('-')) staticFile = staticFile.slice(0, -1);
+            var jsonUrl = './api/' + staticFile + '.json';
+            return _fetch(jsonUrl, { method: 'GET' }).then(function(resp) {
+              if (resp.ok) return resp;
+              var base = staticFile.split('-')[0];
+              return _fetch('./api/' + base + '.json', { method: 'GET' });
+            });
+          }
+          return _fetch(url, opts);
+        };
+      })();
+    </script>
+    <script type="module" crossorigin src="./assets/index-78C6655Z.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-vfZ5l_2-.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
